@@ -81,6 +81,12 @@ A separate utility workflow: **Error Trigger** → **Telegram**. It is assigned 
 the Error Workflow in workflow A's settings, after which n8n runs it automatically
 on failure.
 
+**Testing constraint, learned 28.08:** the Error Trigger fires only for automatic
+executions. n8n states it plainly — "You can't test error workflows when running
+workflows manually." So the branch cannot be checked with the Execute workflow
+button: it has to be provoked through the schedule, with the failure arranged in
+advance.
+
 **Coverage limit:** this catches "it ran and it broke". It cannot catch "it never
 ran because the laptop was off" — there is nothing to fail. That gap is accepted
 deliberately (see `decisions.md`, 26.08).
@@ -102,7 +108,7 @@ be restored with a single command is an export, not a backup.
 | # | Condition | State |
 |---|---|---|
 | 1 | Ran on schedule, no manual trigger | workflow published and active, `triggerAtHour: 21` — waiting for the first unattended run |
-| 2 | Broken password produced a Telegram message | not started — the bot comes after the dump works |
+| 2 | Broken password produced a Telegram message | **met.** Controlled test 28.08: password broken through a shell override (the `.env` never touched), schedule temporarily set to every minute, the scheduled run failed and Telegram received the alert naming the workflow, the node and the error |
 | 3 | The dump has actually been restored | **met.** Restored into a throwaway `postgres:17-alpine`: 27 books, both policies, RLS on, grants intact, container torn down |
 
 Manual run on 28.08 produced `books-2026-08-28-1735.sql`, 9748 bytes, 27 rows,
@@ -122,9 +128,12 @@ guessed. Closed ones keep their answer here instead of disappearing.
   built image, with the same mount, created and then deleted a file in `/backups`
   as user `node`. The Windows bind mount permits writes.
 - **Whether the Execute Command node treats a non-zero exit code as a failure** —
-  open. If it does not, the workflow would finish "successfully" with a broken
-  backup, and a node performing an explicit exit-code check has to be added.
-  Verified with a deliberately broken password.
+  **closed 28.08. It does.** `pg_dump` exiting 1 on a bad password marked the
+  execution as failed, and that is what invoked the error workflow. No extra node
+  checking the exit code is needed. This was the most dangerous question of the
+  four: had the answer been "no", the workflow would have reported success every
+  night while writing nothing, and the failure would have surfaced only when a
+  backup was actually needed.
 - **Restoring into clean Postgres** — **closed 28.08, proven both ways.** Without
   preparation the restore fails at `CREATE TABLE`, before a single row:
   `ERROR: schema "auth" does not exist`. With three empty roles and an `auth` schema
