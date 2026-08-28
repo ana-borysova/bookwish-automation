@@ -1,0 +1,10 @@
+# Secrets. The most important line in this file.
+.env
+
+# Dumps must never reach the repository, not even by accident.
+backups/
+*.sql
+
+# OS clutter
+Thumbs.db
+.DS_Store

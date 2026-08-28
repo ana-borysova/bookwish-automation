@@ -1,0 +1,26 @@
+services:
+  n8n:
+    build: .
+    container_name: bookwish-n8n
+    # Comes back up on its own after the laptop reboots. Without this the 21:00
+    # backup simply would not happen, because the container stayed down.
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # Without this, "21:00" in the schedule would mean 21:00 UTC — midnight in Kyiv.
+      TZ: Europe/Kyiv
+      GENERIC_TIMEZONE: Europe/Kyiv
+      # Value comes from .env, which never reaches git.
+      # In the Execute Command node it is written as "$SUPABASE_DB_URL": the shell
+      # inside the container expands it, not an n8n expression, so the password
+      # never lands in execution logs.
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL}
+    volumes:
+      # Named volume: workflows and credentials survive a container restart.
+      - n8n_data:/home/node/.n8n
+      # The dump folder lives OUTSIDE the repository so copies cannot reach git.
+      - ../bookwish-backups:/backups
+
+volumes:
+  n8n_data:
