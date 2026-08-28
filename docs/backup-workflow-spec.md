@@ -97,6 +97,18 @@ The workflow counts as finished when **all three** conditions hold:
 The third condition is not a formality: by the 28.08 decision, a dump that cannot
 be restored with a single command is an export, not a backup.
 
+**Status as of 28.08:**
+
+| # | Condition | State |
+|---|---|---|
+| 1 | Ran on schedule, no manual trigger | workflow published and active, `triggerAtHour: 21` — waiting for the first unattended run |
+| 2 | Broken password produced a Telegram message | not started — the bot comes after the dump works |
+| 3 | The dump has actually been restored | **met.** Restored into a throwaway `postgres:17-alpine`: 27 books, both policies, RLS on, grants intact, container torn down |
+
+Manual run on 28.08 produced `books-2026-08-28-1735.sql`, 9748 bytes, 27 rows,
+byte-identical to a dump taken by hand apart from the two random `\restrict`
+tokens.
+
 ## 8. Open questions
 
 These are not gaps in the design — they are things more honestly verified than
@@ -113,15 +125,13 @@ guessed. Closed ones keep their answer here instead of disappearing.
   open. If it does not, the workflow would finish "successfully" with a broken
   backup, and a node performing an explicit exit-code check has to be added.
   Verified with a deliberately broken password.
-- **Restoring into clean Postgres** — *sharpened 28.08, still open.* The dump
-  carries more Supabase-specific baggage than roles alone. Read out of a real dump:
-  grants to `anon`, `authenticated` and `service_role`; row-level security enabled
-  with two policies; and `DEFAULT auth.uid()` on the `created_by` column, where
-  `auth.uid()` is a Supabase function living in a schema the dump does not create.
-  A clean Postgres therefore needs the three empty roles **and** an `auth` schema
-  holding an `auth.uid()` stub that returns `uuid` — otherwise the restore fails on
-  the `CREATE TABLE` itself, before it ever reaches the data. To be settled by
-  actually running it.
+- **Restoring into clean Postgres** — **closed 28.08, proven both ways.** Without
+  preparation the restore fails at `CREATE TABLE`, before a single row:
+  `ERROR: schema "auth" does not exist`. With three empty roles and an `auth` schema
+  holding an `auth.uid()` stub, it restores with exit code 0 and no errors: 27
+  books, both policies, row-level security on, grants intact. The stub may return
+  `NULL` — it is never evaluated, because `COPY` supplies every `created_by` value.
+  The procedure is in the README.
 
 ## 9. What goes into the repository
 
