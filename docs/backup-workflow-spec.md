@@ -33,11 +33,12 @@ wishlists and profiles do not come back.
 | Component | Decision |
 |---|---|
 | Orchestrator | n8n in Docker, locally on the laptop |
-| Image | custom: official n8n + `postgresql-client` |
+| Image | custom: n8n `2.36.8` + `pg_dump` copied in from an `alpine:3.24` builder stage |
 | n8n state | named volume `n8n_data` mounted at `/home/node/.n8n` |
 | Dump folder | `../bookwish-backups` on the host → `/backups` in the container |
 | Time zone | `Europe/Kyiv` (`TZ` and `GENERIC_TIMEZONE`) |
 | Restart policy | `unless-stopped` |
+| Blocked nodes | `NODES_EXCLUDE` restated as `["n8n-nodes-base.localFileTrigger"]` — Execute Command is blocked by default from n8n 2.0 |
 | Access | <http://localhost:5678> |
 
 The dump folder sits outside the repository. Copies never reach git.
@@ -50,7 +51,10 @@ The dump folder sits outside the repository. Copies never reach git.
 | Telegram bot token | Credentials inside n8n | the owner |
 
 The connection string comes from the Supabase **Session pooler**. The Transaction
-pooler (port 6543) is not suitable: `pg_dump` needs a stable session.
+pooler (port 6543) is not suitable: `pg_dump` needs a stable session. The direct
+connection is not suitable either — verified 28.08, `db.<project-ref>.supabase.co`
+has an AAAA record and no A record, so it is reachable only over IPv6, which the
+container does not have.
 
 In the Execute Command node the variable is written as `"$SUPABASE_DB_URL"` — the
 shell inside the container expands it, not n8n. The value never appears in
@@ -93,24 +97,31 @@ The workflow counts as finished when **all three** conditions hold:
 The third condition is not a formality: by the 28.08 decision, a dump that cannot
 be restored with a single command is an export, not a backup.
 
-## 8. Open questions, to be closed on the first run
+## 8. Open questions
 
 These are not gaps in the design — they are things more honestly verified than
-guessed.
+guessed. Closed ones keep their answer here instead of disappearing.
 
-- **`pg_dump` version.** It must not be older than the Supabase server. The server
-  version becomes visible on the first run; if needed, one line in the `Dockerfile`
-  changes.
-- **Whether the Execute Command node treats a non-zero exit code as a failure.** If
-  it does not, the workflow would finish "successfully" with a broken backup, and a
-  node performing an explicit exit-code check has to be added. Verified with a
-  deliberately broken password.
-- **Write permissions on the dump folder.** The container writes as user `node`; a
-  bind mount from Windows normally permits writes, but this must be confirmed by
-  the first file that appears.
-- **Roles during restore.** The dump carries grants for `anon`, `authenticated` and
-  `service_role`. A clean Postgres instance has no such roles, so they are created
-  empty for the restore check.
+- **`pg_dump` version** — **closed 28.08.** The header of a real dump reads
+  "Dumped from database version 17.6 / Dumped by pg_dump version 17.11". The client
+  is newer than the server, which is the condition `pg_dump` imposes. The
+  `Dockerfile` needs no change.
+- **Write permissions on the dump folder** — **closed 28.08.** A container from the
+  built image, with the same mount, created and then deleted a file in `/backups`
+  as user `node`. The Windows bind mount permits writes.
+- **Whether the Execute Command node treats a non-zero exit code as a failure** —
+  open. If it does not, the workflow would finish "successfully" with a broken
+  backup, and a node performing an explicit exit-code check has to be added.
+  Verified with a deliberately broken password.
+- **Restoring into clean Postgres** — *sharpened 28.08, still open.* The dump
+  carries more Supabase-specific baggage than roles alone. Read out of a real dump:
+  grants to `anon`, `authenticated` and `service_role`; row-level security enabled
+  with two policies; and `DEFAULT auth.uid()` on the `created_by` column, where
+  `auth.uid()` is a Supabase function living in a schema the dump does not create.
+  A clean Postgres therefore needs the three empty roles **and** an `auth` schema
+  holding an `auth.uid()` stub that returns `uuid` — otherwise the restore fails on
+  the `CREATE TABLE` itself, before it ever reaches the data. To be settled by
+  actually running it.
 
 ## 9. What goes into the repository
 

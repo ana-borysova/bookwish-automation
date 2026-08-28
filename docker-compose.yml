@@ -11,6 +11,15 @@ services:
       # Without this, "21:00" in the schedule would mean 21:00 UTC — midnight in Kyiv.
       TZ: Europe/Kyiv
       GENERIC_TIMEZONE: Europe/Kyiv
+      # From n8n 2.0 the Execute Command node is BLOCKED by default. The built-in
+      # default, read out of the image itself, is
+      #   ["n8n-nodes-base.executeCommand", "n8n-nodes-base.localFileTrigger"]
+      # and workflow A is built entirely on Execute Command — without this line the
+      # node does not appear in the editor at all.
+      #
+      # The list is restated rather than emptied to "[]": localFileTrigger stays
+      # blocked, because nothing here needs it and it was blocked for a reason.
+      NODES_EXCLUDE: '["n8n-nodes-base.localFileTrigger"]'
       # Value comes from .env, which never reaches git.
       # In the Execute Command node it is written as "$SUPABASE_DB_URL": the shell
       # inside the container expands it, not an n8n expression, so the password
