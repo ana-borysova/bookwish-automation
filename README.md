@@ -43,9 +43,16 @@ command:
 psql "$SUPABASE_DB_URL" -f bookwish-backups/books-2026-08-28-2100.sql
 ```
 
-If you restore into a plain Postgres instance rather than into Supabase, create
-empty roles `anon`, `authenticated` and `service_role` first. The dump carries
-grants for them, and without those roles `psql` will complain.
+Restoring back into Supabase is that one command. Restoring into a **plain Postgres**
+instance takes some preparation, because the dump carries Supabase's own furniture
+along with the table:
+
+- roles `anon`, `authenticated` and `service_role`, which the dump grants on — create
+  them empty;
+- a schema `auth` holding a function `auth.uid()` that returns `uuid`, because the
+  `created_by` column defaults to it and two row-level-security policies call it. A
+  stub is enough; without it the restore fails on `CREATE TABLE`, before any data is
+  reached.
 
 ## Secrets
 
@@ -59,7 +66,7 @@ expression, so the password never lands in workflow execution logs.
 ## Layout
 
 ```
-Dockerfile           n8n image + postgresql-client (the official image has no pg_dump)
+Dockerfile           n8n image + pg_dump copied in from an Alpine builder stage
 docker-compose.yml   service, named volume, backup folder mount
 .env.example         variable template
 docs/decisions.md    decision log: what was decided, why, what was rejected

@@ -152,6 +152,23 @@ dangling references — the dump is self-contained and restores cleanly.
 **Consequence, accepted deliberately:** restoring from such a backup does not bring
 back wishlists or profiles. It brings back the book catalogue in full.
 
+**Re-checked 28.08 against the live database, not the application repository.** The
+central claim holds: a real dump of `public.books` contains no `FOREIGN KEY` and no
+`REFERENCES` at all, so cutting at `books` still leaves nothing dangling. Two
+corrections to the detail above, though:
+
+- the column list was incomplete. The table also has `created_by uuid DEFAULT
+  auth.uid()`. It is not a foreign key, so the conclusion stands, but the default
+  calls a Supabase function that a plain Postgres does not have — which is a restore
+  problem, not a scope problem, and is tracked in the specification;
+- the dump is not only structure and data. It also carries row-level security with
+  two policies and grants to `anon`, `authenticated` and `service_role`. That is
+  desirable — restoring reinstates the access rules along with the catalogue — but
+  it is what makes restoring into a bare Postgres more than a one-liner.
+
+Dump size at 27 books: 9.7 KB, which keeps the 30-day retention decision's "disk
+space is not the reason" argument comfortably true.
+
 ## 2026-08-28 · Retention — keep 30 days
 
 Dumps older than 30 days are deleted automatically by a step in the workflow.
@@ -198,28 +215,132 @@ volume, not in the repository. Getting it into git requires exporting it to JSON
 hand (Download in the workflow menu) and committing the file. Without that the
 repository shows the infrastructure but not the automation itself.
 
+## 2026-08-28 · `pg_dump` gets into the image by copying, not by installing
+
+The n8n image (2.36.8) turned out to be a **Docker Hardened Image**: it is Alpine,
+but the package manager has been stripped out of it deliberately. There is no `apk`
+inside and no `apt-get` either, so `apk add postgresql-client` cannot work in that
+image in any form — not with a different version number, not with a different
+package name.
+
+**How it is done instead:** a multi-stage build. A throwaway stage on `alpine:3.24`
+— the same Alpine version the n8n image is built on — installs
+`postgresql17-client`, and the final stage copies two files across: the `pg_dump`
+binary and `libpq.so.5`. The other five libraries `pg_dump` links against
+(`libssl`, `libcrypto`, `libz`, `liblz4`, `libzstd`) are already inside the n8n
+image in the same versions, precisely because the Alpine version matches. Nothing
+n8n itself relies on is overwritten.
+
+**Verified 28.08 in the built image:** `pg_dump (PostgreSQL) 17.11` runs, as the
+unprivileged user `node`, and n8n itself still starts.
+
+**Does not revoke the 28.08 decision "the dump is taken by `pg_dump` in a custom
+image":** that stands in full. Only the mechanism of getting the client inside
+changed, and the alternative — abandoning the real `pg_dump` — was never on the
+table for the reason given there.
+
+**New constraint this creates:** the Alpine version in the builder stage is now tied
+to the Alpine version of the n8n image. Raising the pinned n8n version means
+checking that its `/etc/os-release` still says 3.24. If it does not, the five shared
+libraries stop matching, and that breaks at run time with a library error rather
+than at build time — which is the more expensive way to find out.
+
+**Rejected — an older n8n version that still had `apk`:** it would keep the
+`Dockerfile` shorter by four lines, at the price of pinning the project to an
+outdated n8n from day one. The reason for pinning a version is to control *when* an
+update happens, not to avoid updating at all.
+
+## 2026-08-28 · Edition — Community, self-hosted, with the free lifetime key
+
+n8n runs as **Community Edition** in our own Docker container. The account created
+at <http://localhost:5678> lives in n8n's database inside the `n8n_data` volume, not
+on n8n's servers: nothing is registered with anyone, and no company account exists.
+Community Edition is free with no time limit.
+
+**Why not n8n Cloud:** the hosting question was already settled on 26.08, but Cloud
+also fails on a harder point. **The Execute Command node does not exist on n8n
+Cloud** — the documentation states plainly, "This node isn't available on n8n
+Cloud." Since the 28.08 decision "n8n orchestrates, the shell does the work" builds
+every step of workflow A on that node, Cloud would not merely be a paid alternative;
+it would require redesigning the workflow from scratch.
+
+**Free activation key — taken 28.08.** n8n offers Community users a lifetime key
+unlocking three features: advanced debugging of failed executions, search and
+tagging over execution history, and folders. It is not a trial and does not expire —
+a separate offer, the enterprise trial key, is the one with an end date, and that
+one was declined.
+
+**Why it was taken:** advanced debugging is needed immediately. The definition of
+done requires deliberately breaking the password to prove the Telegram branch fires;
+re-running a failed execution from the failed step is exactly that job.
+
+**Where the key lives, and the limit of that:** in the same `n8n_data` volume as the
+account and the workflows. `docker compose down -v` destroys all three at once, and
+the key is then re-activated from the same email. Nothing about the backup depends
+on it: all three features are editor conveniences, not runtime requirements. The
+project still reproduces from `docker compose up` on a machine with no key — only
+the comfort of debugging differs.
+
+**Rejected — the enterprise trial key:** it expires, and it unlocks SSO, LDAP and
+log streaming, none of which this project has any use for. A dependency with an end
+date, inside something meant to keep running unattended.
+
+## 2026-08-28 · The Execute Command node has to be unblocked explicitly
+
+`NODES_EXCLUDE` is set in `docker-compose.yml` to `["n8n-nodes-base.localFileTrigger"]`.
+
+**Why:** from n8n 2.0 the Execute Command node is blocked by default. The built-in
+default, read out of the image itself, is
+`['n8n-nodes-base.executeCommand', 'n8n-nodes-base.localFileTrigger']`. Every step
+of workflow A is an Execute Command node, so without this setting the node would
+simply not appear in the editor — and it would have been found the slow way, half
+way through assembling the workflow.
+
+**Why the list is restated rather than emptied to `[]`:** `[]` would unblock
+everything n8n blocks by default, including `localFileTrigger`, which nothing here
+needs. The node was blocked for a security reason, and turning off a protection
+wholesale to get at one node next to it is a wider change than the problem asks for.
+
+**Accepted trade-off:** the protection removed from `executeCommand` is real — the
+node runs shell commands inside the container. It is accepted knowingly: this is a
+single-user instance on a personal laptop, and the commands in it are written by
+the owner. In a shared or public deployment this line would need re-arguing.
+
 ---
 
 # Status as of 2026-08-28 and start plan
 
 Verified today:
 
-- the repository `E:/Study/TrainingProjects/bookwish-automation` exists; **git is
-  not initialised** and there is no remote;
-- **Docker Desktop is installed** (4.88.1, CLI 29.7.2), but the application has not
-  been started yet — the engine does not answer.
+- the repository `E:/Study/TrainingProjects/bookwish-automation` exists, git is
+  initialised, `origin` points at GitHub;
+- **Docker works.** Hyper-V and Containers were enabled in Windows features; after
+  the reboot the engine answers. The first calls after a start return `500` for a
+  minute or so while the engine boots — that is not a fault;
+- **the image is built and n8n is running:** <http://localhost:5678> answers, the
+  `n8n_data` volume and the `../bookwish-backups` mount are in place, and writing
+  and deleting inside `/backups` as user `node` both work;
+- **the owner account exists** and the free Community key has been activated;
+- **Execute Command is unblocked** via `NODES_EXCLUDE`, and the container was
+  recreated with it — the account and the key survived, because they live in the
+  volume rather than in the container.
 
 Order of work:
 
 1. Install Docker Desktop. — **done**
-2. `git init` + first commit + push to GitHub.
+2. `git init` + first commit + push to GitHub. — **done**
 3. Bring up n8n in a container with a named volume so workflows survive restarts.
-4. Custom `Dockerfile`: n8n image + `postgresql-client`.
-5. Workflow A: Schedule 21:00 → `pg_dump` → file in a folder on disk →
+   — **done**
+4. Custom `Dockerfile`: n8n image + `postgresql-client`. — **done**, by copying
+   rather than installing (see the decision above).
+5. Owner account in the n8n UI. — **done**
+6. `SUPABASE_DB_URL` filled into `.env`. — *the owner's step; blocks everything
+   below.*
+7. Workflow A: Schedule 21:00 → `pg_dump` → file in a folder on disk →
    **failure-notification branch** (the condition from the 26.08 decision; without
    it the workflow does not count as finished).
-6. Only once A works and is pushed — workflow B.
-7. As a separate task at the end — uploading the dump to Google Drive
+8. Only once A works and is pushed — workflow B.
+9. As a separate task at the end — uploading the dump to Google Drive
    (28.08 decision).
 
 BookWish side (separate repository, not this one): search redesign merged (PR #25),
