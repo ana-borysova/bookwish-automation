@@ -1,0 +1,68 @@
+{
+  "name": "Backup failure alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "108f4c7e-4348-4158-95a9-5be093317ac3",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "chatId": "PUT-YOUR-TELEGRAM-CHAT-ID-HERE",
+        "text": "=BookWish backup failed\n\nWorkflow: {{ $json.workflow.name }}\nNode: {{ $json.execution?.lastNodeExecuted }}\nError: {{ $json.execution?.error?.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "41d624e7-391e-43a2-94fd-a68a9d5fd222",
+      "name": "Send failure alert",
+      "webhookId": "56d35f12-483e-4011-8737-e52a52f4f08d",
+      "credentials": {
+        "telegramApi": {
+          "id": "tt5Rwma8qb7RAmkU",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send failure alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a4cdcf32-8023-4dc7-8fc3-7cf4e179db68",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ea340f952b8389a992516c916916f9e513a053bc0d9faf02c122e5a33b5e8278"
+  },
+  "nodeGroups": [],
+  "id": "k9uV6mrFA3KWySqb",
+  "tags": []
+}

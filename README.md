@@ -86,6 +86,12 @@ In the Execute Command node the connection string is written as
 `"$SUPABASE_DB_URL"`: the shell inside the container expands it, not an n8n
 expression, so the password never lands in workflow execution logs.
 
+The exported workflow JSON under `workflows/` carries no secrets either: the
+Telegram credential appears there as a reference — an id and a name — never as a
+token. The chat ID is replaced with a placeholder before committing. It is not a
+credential, and on its own it lets nobody message you, but it is a stable personal
+identifier and the repository has no use for it.
+
 ## Layout
 
 ```

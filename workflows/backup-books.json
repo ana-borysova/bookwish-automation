@@ -35,7 +35,7 @@
     },
     {
       "parameters": {
-        "command": "find /backups -name 'books-*.sql' -type f -mtime +30 -delete\n  find /backups -name '.books-*.tmp' -type f -mtime +1 -delete"
+        "command": "find /backups -name 'books-*.sql' -type f -mtime +30 -delete\nfind /backups -name '.books-*.tmp' -type f -mtime +1 -delete"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -75,9 +75,13 @@
   "active": true,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "k9uV6mrFA3KWySqb",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
-  "versionId": "27e78239-7044-4bd5-84c8-91554bfdb909",
+  "versionId": "4ee85c7d-44d1-46a3-8196-773ebe17eee5",
   "meta": {
     "instanceId": "ea340f952b8389a992516c916916f9e513a053bc0d9faf02c122e5a33b5e8278"
   },
