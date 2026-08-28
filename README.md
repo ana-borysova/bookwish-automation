@@ -43,16 +43,39 @@ command:
 psql "$SUPABASE_DB_URL" -f bookwish-backups/books-2026-08-28-2100.sql
 ```
 
-Restoring back into Supabase is that one command. Restoring into a **plain Postgres**
-instance takes some preparation, because the dump carries Supabase's own furniture
-along with the table:
+Restoring back into Supabase is that one command.
 
-- roles `anon`, `authenticated` and `service_role`, which the dump grants on — create
-  them empty;
-- a schema `auth` holding a function `auth.uid()` that returns `uuid`, because the
-  `created_by` column defaults to it and two row-level-security policies call it. A
-  stub is enough; without it the restore fails on `CREATE TABLE`, before any data is
-  reached.
+Restoring into a **plain Postgres** instance needs a preparation step first,
+because the dump carries Supabase's own furniture along with the table: grants to
+the `anon`, `authenticated` and `service_role` roles, row-level security with two
+policies, and a `created_by` column that defaults to `auth.uid()`. Without the
+preparation the restore fails on `CREATE TABLE`, before any data is reached:
+
+```
+ERROR:  schema "auth" does not exist
+LINE 11:     created_by uuid DEFAULT auth.uid()
+```
+
+Run this against the empty database first:
+
+```sql
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE ROLE service_role;
+
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid
+    LANGUAGE sql STABLE
+    AS $$ SELECT NULL::uuid $$;
+```
+
+The `auth.uid()` stub can return `NULL`: it is never evaluated during a restore,
+because `COPY` supplies every `created_by` value explicitly. It only has to exist so
+that Postgres can parse the table definition and the two policies.
+
+**Verified 2026-08-28** against a throwaway `postgres:17-alpine` container: 27 books
+restored, both policies present, row-level security on, grants intact.
+
 
 ## Secrets
 
